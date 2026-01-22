@@ -2,136 +2,198 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>심박수 측정기 Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>BPM Tapper Full</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --primary-color: #ff4757;
-            --bg-color: #f1f2f6;
+            --bg-color: #1e272e; /* 다크 테마로 몰입감 향상 */
+            --text-color: #ffffff;
         }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* 스크롤 방지 */
+            background-color: var(--bg-color);
+            font-family: -apple-system, system-ui, sans-serif;
+            color: var(--text-color);
+        }
+
+        /* 전체 레이아웃: 위-중간-아래 3단 구성 */
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100dvh; /* Dynamic Viewport Height 사용 */
+            padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) 0;
+        }
+
+        /* 상단: BPM 수치 표시 */
+        .header {
+            flex: 1.5;
             display: flex;
             flex-direction: column;
             align-items: center;
-            background-color: var(--bg-color);
-            margin: 0;
-            padding: 20px;
-            touch-action: manipulation;
+            justify-content: center;
         }
-        .container {
-            text-align: center;
-            width: 100%;
-            max-width: 500px;
-            background: white;
-            padding: 20px;
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
-        }
+
         #bpm-display {
-            font-size: 4rem;
-            font-weight: bold;
+            font-size: 6rem;
+            font-weight: 900;
             color: var(--primary-color);
-            line-height: 1;
+            text-shadow: 0 0 20px rgba(255, 71, 87, 0.4);
         }
-        .unit { font-size: 1.2rem; color: #747d8c; margin-bottom: 20px; }
-        
+
+        .unit {
+            font-size: 1.2rem;
+            color: #808e9b;
+            letter-spacing: 2px;
+        }
+
+        /* 중간: 거대한 터치 영역 */
+        .tap-area {
+            flex: 5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
         #tap-btn {
-            width: 150px;
-            height: 150px;
+            width: 80vw;
+            height: 80vw;
+            max-width: 300px;
+            max-height: 300px;
             border-radius: 50%;
-            border: none;
+            border: 8px solid rgba(255, 71, 87, 0.2);
             background-color: var(--primary-color);
             color: white;
-            font-size: 1.2rem;
+            font-size: 2rem;
             font-weight: bold;
+            box-shadow: 0 0 50px rgba(255, 71, 87, 0.3);
             cursor: pointer;
-            transition: transform 0.1s;
-            -webkit-tap-highlight-color: transparent;
-            margin: 10px 0;
+            transition: transform 0.05s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        #tap-btn:active { transform: scale(0.92); }
+
+        #tap-btn:active {
+            transform: scale(0.9);
+            background-color: #ff6b81;
+        }
+
+        /* 하단: 그래프 영역 */
+        .footer {
+            flex: 2.5;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.2);
+        }
 
         .chart-container {
             width: 100%;
-            height: 200px;
-            margin-top: 30px;
+            height: 100%;
         }
-        .controls { margin-top: 20px; }
-        button.sub {
-            background: none;
-            border: 1px solid #ced6e0;
-            padding: 8px 16px;
-            border-radius: 20px;
-            color: #747d8c;
-            cursor: pointer;
+
+        /* 리셋 버튼 (플로팅) */
+        #reset-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: #808e9b;
+            padding: 10px 15px;
+            border-radius: 10px;
+            font-size: 0.8rem;
         }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div id="bpm-display">0</div>
-    <div class="unit">BPM (5s Avg)</div>
-    
-    <button id="tap-btn">TAP</button>
-    
-    <div class="chart-container">
-        <canvas id="bpmChart"></canvas>
+<div class="app-container">
+    <button id="reset-btn" onclick="reset()">RESET</button>
+
+    <div class="header">
+        <div id="bpm-display">0</div>
+        <div class="unit">BPM (5s AVG)</div>
     </div>
     
-    <div class="controls">
-        <button class="sub" onclick="reset()">데이터 리셋</button>
+    <div class="tap-area">
+        <div id="tap-btn">TAP</div>
+    </div>
+    
+    <div class="footer">
+        <div class="chart-container">
+            <canvas id="bpmChart"></canvas>
+        </div>
     </div>
 </div>
 
 <script>
     let tapTimes = [];
-    let bpmData = []; // 그래프용 데이터
-    let labels = [];  // 그래프용 라벨
+    let bpmData = [];
+    let labels = [];
     let count = 0;
 
     const bpmDisplay = document.getElementById('bpm-display');
     const tapBtn = document.getElementById('tap-btn');
     const ctx = document.getElementById('bpmChart').getContext('2d');
 
-    // Chart.js 설정
+    // Chart.js 설정 (다크 모드 최적화)
     const chart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
             datasets: [{
-                label: '심박수 변화',
                 data: bpmData,
                 borderColor: '#ff4757',
-                backgroundColor: 'rgba(255, 71, 87, 0.1)',
-                borderWidth: 2,
+                borderWidth: 3,
                 fill: true,
+                backgroundColor: 'rgba(255, 71, 87, 0.1)',
                 tension: 0.4,
-                pointRadius: 2
+                pointRadius: 0
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             scales: {
-                y: { min: 40, max: 200, grid: { display: false } },
+                y: { 
+                    min: 40, max: 200, 
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { color: '#808e9b' }
+                },
                 x: { display: false }
             },
             plugins: { legend: { display: false } },
-            animation: { duration: 200 }
+            animation: { duration: 150 }
         }
     });
 
-    tapBtn.addEventListener('touchstart', (e) => { e.preventDefault(); handleTap(); });
-    tapBtn.addEventListener('mousedown', handleTap);
+    // 터치 반응 속도 극대화
+    tapBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        handleTap();
+    });
+    
+    // PC 브라우저 테스트용
+    tapBtn.addEventListener('mousedown', (e) => {
+        if (e.button === 0) handleTap();
+    });
 
     function handleTap() {
         const now = Date.now();
         tapTimes.push(now);
         
-        // 5초 이동 평균 윈도우 적용
         const windowSize = 5000; 
         tapTimes = tapTimes.filter(time => now - time <= windowSize);
         
@@ -143,14 +205,9 @@
 
     function calculateBPM() {
         if (tapTimes.length < 2) return 0;
-
-        const firstTap = tapTimes[0];
-        const lastTap = tapTimes[tapTimes.length - 1];
-        const durationInSeconds = (lastTap - firstTap) / 1000;
-        
-        if (durationInSeconds <= 0) return 0;
-
-        const bpm = Math.round((tapTimes.length - 1) * 60 / durationInSeconds);
+        const duration = (tapTimes[tapTimes.length - 1] - tapTimes[0]) / 1000;
+        if (duration <= 0) return 0;
+        const bpm = Math.round((tapTimes.length - 1) * 60 / duration);
         bpmDisplay.innerText = bpm;
         return bpm;
     }
@@ -159,13 +216,11 @@
         count++;
         labels.push(count);
         bpmData.push(bpm);
-
-        // 그래프에 최대 20개 지점만 표시 (가독성)
-        if (bpmData.length > 20) {
+        if (bpmData.length > 30) {
             labels.shift();
             bpmData.shift();
         }
-        chart.update();
+        chart.update('none'); // 애니메이션 없이 즉시 업데이트하여 성능 확보
     }
 
     function reset() {
